@@ -1,0 +1,64 @@
+{
+  "name": "harper-word-addon",
+  "version": "0.52.0",
+  "description": "Harper Grammar Checker Add-in for Microsoft Word",
+  "main": "src/taskpane/taskpane.js",
+  "homepage": "https://writewithharper.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/automattic/harper.git"
+  },
+  "license": "Apache-2.0",
+  "config": {
+    "app_to_debug": "word",
+    "app_type_to_debug": "desktop",
+    "dev_server_port": 3000
+  },
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "dev-server": "webpack serve --mode development",
+    "lint": "office-addin-lint check",
+    "lint:fix": "office-addin-lint fix",
+    "prettier": "office-addin-lint prettier",
+    "sideload": "office-addin-dev-settings sideload manifest.xml",
+    "start": "office-addin-debugging start manifest.xml",
+    "start:desktop": "office-addin-debugging start manifest.xml desktop",
+    "start:web": "office-addin-debugging start manifest.xml web",
+    "stop": "office-addin-debugging stop manifest.xml",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "unload": "office-addin-dev-settings remove manifest.xml",
+    "validate": "office-addin-manifest validate manifest.xml",
+    "watch": "webpack --mode development --watch"
+  },
+  "dependencies": {
+    "core-js": "^3.38.1",
+    "regenerator-runtime": "^0.14.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.8",
+    "@babel/preset-typescript": "^7.25.7",
+    "@types/office-js": "^1.0.438",
+    "@types/office-runtime": "^1.0.35",
+    "babel-loader": "^9.2.1",
+    "copy-webpack-plugin": "^12.0.2",
+    "eslint-plugin-office-addins": "^3.0.2",
+    "html-loader": "^5.1.0",
+    "html-webpack-plugin": "^5.6.3",
+    "office-addin-debugging": "^5.1.9",
+    "office-addin-dev-certs": "^1.13.5",
+    "office-addin-lint": "^2.3.5",
+    "office-addin-manifest": "^1.13.5",
+    "office-addin-prettier-config": "^1.2.1",
+    "source-map-loader": "^5.0.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.6.3",
+    "webpack": "^5.95.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0"
+  },
+  "prettier": "office-addin-prettier-config",
+  "browserslist": [
+    "ie 11"
+  ]
+}
