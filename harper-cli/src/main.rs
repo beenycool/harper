@@ -138,6 +138,28 @@ enum Args {
     Compounds,
     /// Provided a sentence or phrase, emit a list of each noun phrase contained within.
     NominalPhrases { input: String },
+    /// Add a word to the user dictionary.
+    AddWord {
+        /// The word to add to the user dictionary.
+        word: String,
+        /// Path to the user dictionary.
+        #[arg(short, long, default_value = config_dir().unwrap().join("harper-ls/dictionary.txt").into_os_string())]
+        user_dict_path: PathBuf,
+    },
+    /// Remove a word from the user dictionary.
+    RemoveWord {
+        /// The word to remove from the user dictionary.
+        word: String,
+        /// Path to the user dictionary.
+        #[arg(short, long, default_value = config_dir().unwrap().join("harper-ls/dictionary.txt").into_os_string())]
+        user_dict_path: PathBuf,
+    },
+    /// List all words in the user dictionary.
+    ListUserWords {
+        /// Path to the user dictionary.
+        #[arg(short, long, default_value = config_dir().unwrap().join("harper-ls/dictionary.txt").into_os_string())]
+        user_dict_path: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -678,6 +700,20 @@ fn main() -> anyhow::Result<()> {
 
             Ok(())
         }
+        Args::AddWord { word, user_dict_path } => {
+            add_word_to_dict(&word, &user_dict_path)?;
+            println!("Added '{}' to user dictionary at {}", word, user_dict_path.display());
+            Ok(())
+        }
+        Args::RemoveWord { word, user_dict_path } => {
+            remove_word_from_dict(&word, &user_dict_path)?;
+            println!("Removed '{}' from user dictionary at {}", word, user_dict_path.display());
+            Ok(())
+        }
+        Args::ListUserWords { user_dict_path } => {
+            list_user_words(&user_dict_path)?;
+            Ok(())
+        }
     }
 }
 
@@ -765,4 +801,104 @@ fn file_dict_name(path: &Path) -> PathBuf {
     }
 
     rewritten.into()
+}
+
+/// Add a word to the user dictionary
+fn add_word_to_dict(word: &str, dict_path: &Path) -> anyhow::Result<()> {
+    // Validate the word contains only valid characters
+    if word.trim().is_empty() {
+        return Err(anyhow!("Word cannot be empty"));
+    }
+    
+    let word = word.trim();
+    
+    // Basic validation - words should contain only letters, numbers, apostrophes, and hyphens
+    if !word.chars().all(|c| c.is_alphanumeric() || c == '\'' || c == '-') {
+        return Err(anyhow!("Word '{}' contains invalid characters. Only letters, numbers, apostrophes, and hyphens are allowed.", word));
+    }
+    
+    // Create the directory if it doesn't exist
+    if let Some(parent) = dict_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
+    // Read existing words or create empty list
+    let existing_words = match fs::read_to_string(dict_path) {
+        Ok(content) => content,
+        Err(_) => String::new(),
+    };
+    
+    // Check if word already exists (case-insensitive)
+    if existing_words.lines().any(|line| line.trim().eq_ignore_ascii_case(word)) {
+        return Err(anyhow!("Word '{}' already exists in user dictionary", word));
+    }
+    
+    // Append the word to the file
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dict_path)?;
+    
+    use std::io::Write;
+    if !existing_words.is_empty() && !existing_words.ends_with('\n') {
+        writeln!(file)?;
+    }
+    writeln!(file, "{}", word)?;
+    
+    Ok(())
+}
+
+/// Remove a word from the user dictionary
+fn remove_word_from_dict(word: &str, dict_path: &Path) -> anyhow::Result<()> {
+    let word = word.trim();
+    
+    // Read existing words
+    let content = fs::read_to_string(dict_path)
+        .map_err(|_| anyhow!("User dictionary not found at {}", dict_path.display()))?;
+    
+    let mut found = false;
+    let updated_content: String = content
+        .lines()
+        .filter(|line| {
+            let line_word = line.trim();
+            if line_word.eq_ignore_ascii_case(word) {
+                found = true;
+                false // Filter out this line
+            } else {
+                true // Keep this line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    
+    if !found {
+        return Err(anyhow!("Word '{}' not found in user dictionary", word));
+    }
+    
+    // Write the updated content back
+    fs::write(dict_path, updated_content)?;
+    
+    Ok(())
+}
+
+/// List all words in the user dictionary
+fn list_user_words(dict_path: &Path) -> anyhow::Result<()> {
+    let content = fs::read_to_string(dict_path)
+        .map_err(|_| anyhow!("User dictionary not found at {}", dict_path.display()))?;
+    
+    let words: Vec<&str> = content.lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect();
+    
+    if words.is_empty() {
+        println!("User dictionary is empty");
+    } else {
+        println!("Words in user dictionary ({} total):", words.len());
+        for word in words {
+            println!("  {}", word);
+        }
+    }
+    
+    Ok(())
 }
