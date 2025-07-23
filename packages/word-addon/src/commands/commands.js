@@ -98,7 +98,7 @@ function checkGrammar(event) {
         const span = firstLint.span();
         
         // Create a range for the first problematic text
-        const problemRange = range.getRange().getRange(span.start, span.end);
+        const problemRange = range.getRangeByIndexes(span.start, span.end - span.start);
         
         // Highlight the problematic text
         problemRange.font.highlightColor = '#FFFF00'; // Yellow highlight
