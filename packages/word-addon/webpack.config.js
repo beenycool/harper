@@ -69,7 +69,8 @@ module.exports = async (env, options) => {
               if (dev) {
                 return content;
               } else {
-                return content.toString().replace(new RegExp("https://localhost:3000", "g"), "https://your-domain.com");
+                const productionUrl = process.env.HARPER_ADDON_PRODUCTION_URL || "https://your-domain.com";
+                return content.toString().replace(new RegExp("https://localhost:3000", "g"), productionUrl);
               }
             },
           },
