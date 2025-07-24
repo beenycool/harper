@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Harper Grammar Checker</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="taskpane.css" />
+</head>
+
+<body>
+    <div class="ms-welcome">
+        <header class="ms-welcome__header ms-bgColor-neutralLighter ms-fontColor-neutralPrimary">
+            <img width="90" height="90" src="../../assets/logo.png" alt="Harper" title="Harper" />
+            <h1 class="ms-fontSize-su ms-fontWeight-light ms-fontColor-neutralPrimary">Harper Grammar Checker</h1>
+            <p class="ms-fontSize-l ms-fontWeight-semilight ms-fontColor-neutralSecondary">The private grammar checker for 21st Century English</p>
+        </header>
+        <main id="app-body" class="ms-welcome__main">
+            <div class="content-section">
+                <div class="action-section">
+                    <button id="check-document" class="ms-Button ms-Button--primary">
+                        <span class="ms-Button-label">Check Document</span>
+                    </button>
+                    <p class="instruction">Click to check your entire document for grammar issues.</p>
+                </div>
+
+                <div class="action-section">
+                    <button id="check-selection" class="ms-Button">
+                        <span class="ms-Button-label">Check Selection</span>
+                    </button>
+                    <p class="instruction">Check only the currently selected text.</p>
+                </div>
+
+                <div class="separator"></div>
+
+                <div class="dictionary-section">
+                    <h3>Personal Dictionary</h3>
+                    <div class="input-group">
+                        <input type="text" id="new-word" placeholder="Add a word..." class="ms-TextField-field" />
+                        <button id="add-word" class="ms-Button ms-Button--primary">
+                            <span class="ms-Button-label">Add</span>
+                        </button>
+                    </div>
+                    <div id="word-list" class="word-list">
+                        <!-- User words will be populated here -->
+                    </div>
+                </div>
+
+                <div class="separator"></div>
+
+                <div id="results-section" class="results-section" style="display: none;">
+                    <h3>Grammar Issues</h3>
+                    <div id="lint-results" class="lint-results">
+                        <!-- Lint results will be populated here -->
+                    </div>
+                </div>
+
+                <div id="status" class="status-message"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="text/javascript" src="taskpane.js"></script>
+</body>
+</html>

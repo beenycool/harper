@@ -2,9 +2,10 @@
 
 use harper_core::spell::{Dictionary, FstDictionary, MergedDictionary, MutableDictionary, WordId};
 use hashbrown::HashMap;
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, process};
@@ -29,6 +30,20 @@ use input::Input;
 
 mod annotate_tokens;
 use annotate_tokens::{Annotation, AnnotationType};
+
+/// Safely get the config directory path for Harper dictionaries
+fn get_harper_config_dir() -> anyhow::Result<PathBuf> {
+    config_dir()
+        .ok_or_else(|| anyhow!("Unable to determine config directory. Please ensure your environment has a valid home directory and try again."))
+        .map(|dir| dir.join("harper-ls"))
+}
+
+/// Safely get the data local directory path for Harper file dictionaries
+fn get_harper_data_local_dir() -> anyhow::Result<PathBuf> {
+    data_local_dir()
+        .ok_or_else(|| anyhow!("Unable to determine local data directory. Please ensure your environment has a valid home directory and try again."))
+        .map(|dir| dir.join("harper-ls/file_dictionaries/"))
+}
 
 /// A debugging tool for the Harper grammar checker.
 #[derive(Debug, Parser)]
@@ -55,11 +70,11 @@ enum Args {
         #[arg(short, long, default_value = Dialect::American.to_string())]
         dialect: Dialect,
         /// Path to the user dictionary.
-        #[arg(short, long, default_value = config_dir().unwrap().join("harper-ls/dictionary.txt").into_os_string())]
-        user_dict_path: PathBuf,
+        #[arg(short, long)]
+        user_dict_path: Option<PathBuf>,
         /// Path to the directory for file-local dictionaries.
-        #[arg(short, long, default_value = data_local_dir().unwrap().join("harper-ls/file_dictionaries/").into_os_string())]
-        file_dict_path: PathBuf,
+        #[arg(short, long)]
+        file_dict_path: Option<PathBuf>,
     },
     /// Parse a provided document and print the detected symbols.
     Parse {
@@ -138,6 +153,28 @@ enum Args {
     Compounds,
     /// Provided a sentence or phrase, emit a list of each noun phrase contained within.
     NominalPhrases { input: String },
+    /// Add a word to the user dictionary.
+    AddWord {
+        /// The word to add to the user dictionary.
+        word: String,
+        /// Path to the user dictionary.
+        #[arg(short, long)]
+        user_dict_path: Option<PathBuf>,
+    },
+    /// Remove a word from the user dictionary.
+    RemoveWord {
+        /// The word to remove from the user dictionary.
+        word: String,
+        /// Path to the user dictionary.
+        #[arg(short, long)]
+        user_dict_path: Option<PathBuf>,
+    },
+    /// List all words in the user dictionary.
+    ListUserWords {
+        /// Path to the user dictionary.
+        #[arg(short, long)]
+        user_dict_path: Option<PathBuf>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -160,6 +197,18 @@ fn main() -> anyhow::Result<()> {
 
             let mut merged_dict = MergedDictionary::new();
             merged_dict.add_dictionary(dictionary);
+
+            // Get the user dictionary path, using default if not provided
+            let user_dict_path = match user_dict_path {
+                Some(path) => path,
+                None => get_harper_config_dir()?.join("dictionary.txt"),
+            };
+
+            // Get the file dictionary path, using default if not provided
+            let file_dict_path = match file_dict_path {
+                Some(path) => path,
+                None => get_harper_data_local_dir()?,
+            };
 
             // Attempt to load user dictionary.
             match load_dict(&user_dict_path) {
@@ -494,8 +543,6 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Args::RenameFlag { old, new, dir } => {
-            use serde_json::Value;
-
             let dict_path = dir.join("dictionary.dict");
             let affixes_path = dir.join("annotations.json");
 
@@ -678,6 +725,32 @@ fn main() -> anyhow::Result<()> {
 
             Ok(())
         }
+        Args::AddWord { word, user_dict_path } => {
+            let user_dict_path = match user_dict_path {
+                Some(path) => path,
+                None => get_harper_config_dir()?.join("dictionary.txt"),
+            };
+            add_word_to_dict(&word, &user_dict_path)?;
+            println!("Added '{}' to user dictionary at {}", word, user_dict_path.display());
+            Ok(())
+        }
+        Args::RemoveWord { word, user_dict_path } => {
+            let user_dict_path = match user_dict_path {
+                Some(path) => path,
+                None => get_harper_config_dir()?.join("dictionary.txt"),
+            };
+            remove_word_from_dict(&word, &user_dict_path)?;
+            println!("Removed '{}' from user dictionary at {}", word, user_dict_path.display());
+            Ok(())
+        }
+        Args::ListUserWords { user_dict_path } => {
+            let user_dict_path = match user_dict_path {
+                Some(path) => path,
+                None => get_harper_config_dir()?.join("dictionary.txt"),
+            };
+            list_user_words(&user_dict_path)?;
+            Ok(())
+        }
     }
 }
 
@@ -765,4 +838,100 @@ fn file_dict_name(path: &Path) -> PathBuf {
     }
 
     rewritten.into()
+}
+
+/// Add a word to the user dictionary
+fn add_word_to_dict(word: &str, dict_path: &Path) -> anyhow::Result<()> {
+    // Validate the word contains only valid characters
+    if word.trim().is_empty() {
+        return Err(anyhow!("Word cannot be empty"));
+    }
+    
+    let word = word.trim();
+    
+    // Basic validation - words should contain only letters, numbers, apostrophes, and hyphens
+    if !word.chars().all(|c| c.is_alphanumeric() || c == '\'' || c == '-') {
+        return Err(anyhow!("Word '{}' contains invalid characters. Only letters, numbers, apostrophes, and hyphens are allowed.", word));
+    }
+    
+    // Create the directory if it doesn't exist
+    if let Some(parent) = dict_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
+    // Read existing words or create empty list
+    let existing_words = match fs::read_to_string(dict_path) {
+        Ok(content) => content,
+        Err(_) => String::new(),
+    };
+    
+    // Check if word already exists (case-insensitive)
+    if existing_words.lines().any(|line| line.trim().eq_ignore_ascii_case(word)) {
+        return Err(anyhow!("Word '{}' already exists in user dictionary", word));
+    }
+    
+    // Append the word to the file
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dict_path)?;
+    
+    if !existing_words.is_empty() && !existing_words.ends_with('\n') {
+        writeln!(file)?;
+    }
+    writeln!(file, "{}", word)?;
+    
+    Ok(())
+}
+
+/// Remove a word from the user dictionary
+fn remove_word_from_dict(word: &str, dict_path: &Path) -> anyhow::Result<()> {
+    let word = word.trim();
+    
+    // Read existing words
+    let content = fs::read_to_string(dict_path)
+        .map_err(|_| anyhow!("User dictionary not found at {}", dict_path.display()))?;
+    
+    let original_lines: Vec<&str> = content.lines().collect();
+    let updated_lines: Vec<&str> = original_lines
+        .iter()
+        .filter(|line| {
+            let line_word = line.trim();
+            !line_word.eq_ignore_ascii_case(word)
+        })
+        .copied()
+        .collect();
+    
+    // Check if the word was found by comparing the number of lines
+    if original_lines.len() == updated_lines.len() {
+        return Err(anyhow!("Word '{}' not found in user dictionary", word));
+    }
+    
+    // Write the updated content back
+    let updated_content = updated_lines.join("\n");
+    fs::write(dict_path, updated_content)?;
+    
+    Ok(())
+}
+
+/// List all words in the user dictionary
+fn list_user_words(dict_path: &Path) -> anyhow::Result<()> {
+    let content = fs::read_to_string(dict_path)
+        .map_err(|_| anyhow!("User dictionary not found at {}", dict_path.display()))?;
+    
+    let words: Vec<&str> = content.lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect();
+    
+    if words.is_empty() {
+        println!("User dictionary is empty");
+    } else {
+        println!("Words in user dictionary ({} total):", words.len());
+        for word in words {
+            println!("  {}", word);
+        }
+    }
+    
+    Ok(())
 }
